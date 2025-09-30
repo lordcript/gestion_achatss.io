@@ -2,3 +2,9 @@ streamlit
 requests
 pandas
 plotly-express
+# --- DÉPENDANCES CRITIQUES DU BACKEND API ---
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+psycopg2-binary

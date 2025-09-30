@@ -4,7 +4,6 @@ from datetime import datetime
 
 # =========================================================================
 # 1. Définition de la Base Déclarative
-# C'est la classe de base pour toutes les classes de modèles ORM
 # =========================================================================
 class Base(DeclarativeBase):
     pass
@@ -31,8 +30,11 @@ class Produit(Base):
     id = Column(Integer, primary_key=True, index=True)
     nom = Column(String, index=True, nullable=False)
     description = Column(String)
+    # AJOUTÉ/CORRIGÉ : Pour correspondre à ProduitBase dans api.py
+    reference = Column(String, unique=True, nullable=False)
     prix_unitaire = Column(Float, nullable=False)
-    stock = Column(Integer, default=0)
+    # RENOMMÉ : 'stock' devient 'stock_actuel' pour correspondre à ProduitBase
+    stock_actuel = Column(Integer, default=0) 
 
     # Relation : Un produit peut apparaître dans plusieurs détails de commande
     details = relationship("DetailCommande", back_populates="produit")
@@ -46,6 +48,11 @@ class Commande(Base):
     id = Column(Integer, primary_key=True, index=True)
     date_commande = Column(DateTime, default=datetime.utcnow)
     statut = Column(String, default="En attente") # Ex: En attente, Livrée, Annulée
+    
+    # AJOUTÉ : Pour correspondre à CommandeCreate dans api.py
+    societe = Column(String)
+    # AJOUTÉ : Pour stocker le coût total calculé dans api.py
+    cout_total = Column(Float) 
 
     # Clé étrangère vers le fournisseur
     fournisseur_id = Column(Integer, ForeignKey('fournisseurs.id'))
@@ -55,7 +62,7 @@ class Commande(Base):
     details = relationship("DetailCommande", back_populates="commande")
 
 # =========================================================================
-# 5. Modèle DetailCommande (Order Detail - table de jointure pour les produits)
+# 5. Modèle DetailCommande (Order Detail)
 # =========================================================================
 class DetailCommande(Base):
     __tablename__ = 'details_commandes'

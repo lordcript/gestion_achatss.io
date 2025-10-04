@@ -1,3 +1,53 @@
+# --- Route de mise à jour d'un produit (stock, prix, etc.) ---
+@app.put("/produits/{produit_id}", response_model=ProduitInDB)
+def update_produit(produit_id: int, update_data: dict, db: Session = Depends(get_db)):
+    db_produit = db.query(Produit).filter(Produit.id == produit_id).first()
+    if not db_produit:
+        raise HTTPException(status_code=404, detail="Produit non trouvé")
+    # Mise à jour des champs autorisés
+    for field in ["nom", "reference", "prix_unitaire", "stock_actuel"]:
+        if field in update_data:
+            setattr(db_produit, field, update_data[field])
+    db.commit()
+    db.refresh(db_produit)
+    return db_produit
+# --- Route de modification d'une commande ---
+from fastapi import HTTPException
+
+@app.put("/commandes/{commande_id}", response_model=CommandeInDB)
+def update_commande(commande_id: int, update_data: dict, db: Session = Depends(get_db)):
+    db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
+    if not db_commande:
+        raise HTTPException(status_code=404, detail="Commande non trouvée")
+    # Mise à jour du statut
+    if "statut" in update_data:
+        db_commande.statut = update_data["statut"]
+    # Mise à jour des articles (optionnel)
+    if "articles" in update_data:
+        # On supprime les anciens détails et on ajoute les nouveaux
+        db.query(DetailCommande).filter(DetailCommande.commande_id == commande_id).delete()
+        for article in update_data["articles"]:
+            detail = DetailCommande(
+                commande_id=commande_id,
+                produit_id=article["produit_id"],
+                quantite=article["quantite"],
+                prix_achat=article["prix_achat"]
+            )
+            db.add(detail)
+    db.commit()
+    db.refresh(db_commande)
+    return db_commande
+
+# --- Route de suppression d'une commande ---
+@app.delete("/commandes/{commande_id}")
+def delete_commande(commande_id: int, db: Session = Depends(get_db)):
+    db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
+    if not db_commande:
+        raise HTTPException(status_code=404, detail="Commande non trouvée")
+    db.query(DetailCommande).filter(DetailCommande.commande_id == commande_id).delete()
+    db.delete(db_commande)
+    db.commit()
+    return {"message": "Commande supprimée"}
 # api_achats.py - API de Gestion des Achats (Prêt pour le Cloud)
 import os
 from fastapi import FastAPI, Depends, HTTPException
@@ -20,19 +70,11 @@ from models_achats import Base, Produit, Fournisseur, Commande, DetailCommande
 # Si elle n'est pas définie (développement local), utilise SQLite.
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./achats_local.db")
 
-# ----------------- DÉBUT DE LA CORRECTION CRITIQUE -----------------
-# Render utilise le format 'postgres://' qui est obsolète pour SQLAlchemy 2.0.
-# On remplace 'postgres://' par 'postgresql://' avant de créer l'engine.
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-# ------------------ FIN DE LA CORRECTION CRITIQUE ------------------
-
 # Si on utilise SQLite, l'argument 'check_same_thread' est nécessaire.
 # Sinon, on utilise un engine standard pour le Cloud (PostgreSQL, etc.)
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    # L'URL corrigée (si nécessaire) est utilisée ici.
     engine = create_engine(DATABASE_URL)
 
 # Crée les tables si elles n'existent pas (utile pour la première exécution en ligne)
@@ -118,7 +160,7 @@ app = FastAPI(
 
 # CORS (Cross-Origin Resource Sharing) est essentiel pour que Streamlit (sur un autre domaine) puisse parler à cette API.
 # Permet toutes les origines (pratique pour le développement/déploiement Streamlit)
-origins = ["*"]
+origins = ["*"] 
 
 app.add_middleware(
     CORSMiddleware,
@@ -160,84 +202,6 @@ def create_fournisseur(fournisseur: FournisseurBase, db: Session = Depends(get_d
     return db_fournisseur
 
 @app.get("/fournisseurs/", response_model=List[FournisseurInDB])
-def read_fournisseurs(db: Session = Depends(get_db)):
-    return db.query(Fournisseur).all()
-
-
-# --- Route Commande (Logique Métier : Création et Stock) ---
-@app.post("/commandes/", response_model=CommandeInDB)
-def create_commande(commande: CommandeCreate, db: Session = Depends(get_db)):
-    
-    # 1. Calculer le coût total
-    cout_total = 0.0
-    for detail in commande.details:
-        cout_total += detail.quantite * detail.prix_achat
-
-    # 2. Créer l'objet Commande
-    db_commande = Commande(
-        fournisseur_id=commande.fournisseur_id,
-        societe=commande.societe,
-        statut=commande.statut,
-        cout_total=cout_total
-    )
-    db.add(db_commande)
-    db.commit()
-    db.refresh(db_commande)
-
-    # 3. Traiter les Détails de Commande et Mettre à Jour le Stock
-    for detail in commande.details:
-        
-        # Créer le Détail de Commande
-        db_detail = DetailCommande(
-            commande_id=db_commande.id,
-            produit_id=detail.produit_id,
-            quantite=detail.quantite,
-            prix_achat=detail.prix_achat
-        )
-        db.add(db_detail)
-
-        # Mettre à jour le stock du produit (Augmentation pour un achat)
-        produit = db.query(Produit).filter(Produit.id == detail.produit_id).first()
-        if produit:
-            produit.stock_actuel += detail.quantite
-        
-    db.commit()
-    db.refresh(db_commande)
-    return db_commande
-
-@app.get("/commandes/", response_model=List[CommandeInDB])
-def read_commandes(db: Session = Depends(get_db)):
-    # Charge les détails pour que Pydantic puisse les sérialiser
-    return db.query(Commande).options(joinedload(Commande.details)).all()
-
-
-# --- Route Statistiques ---
-@app.get("/statistiques/produits/")
-def get_produit_stats(db: Session = Depends(get_db)):
-    
-    # 1. Joindre DetailCommande et Produit
-    # 2. Grouper par produit (nom)
-    # 3. Calculer la somme des quantités (quantite_vendue)
-    # 4. Calculer la somme du coût total (prix_achat * quantite) (revenu_total)
-    stats = db.query(
-        Produit.nom.label('nom_produit'),
-        func.sum(DetailCommande.quantite).label('quantite_vendue'),
-        func.sum(DetailCommande.prix_achat * DetailCommande.quantite).label('revenu_total')
-    ).join(DetailCommande, Produit.id == DetailCommande.produit_id
-    ).group_by(Produit.nom
-    ).all()
-    
-    # Convertir les résultats en une liste de dictionnaires
-    results = [
-        {
-            "nom_produit": row.nom_produit,
-            "quantite_vendue": float(row.quantite_vendue),
-            "revenu_total": float(row.revenu_total)
-        }
-        for row in stats
-    ]
-    
-    return results
 def read_fournisseurs(db: Session = Depends(get_db)):
     return db.query(Fournisseur).all()
 

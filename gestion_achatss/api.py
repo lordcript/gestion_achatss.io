@@ -1,53 +1,70 @@
-# --- Route de mise à jour d'un produit (stock, prix, etc.) ---
+
+## === Schémas de mise à jour (Update) pour Pydantic ===
+class ProduitUpdate(BaseModel):
+    nom: str | None = None
+    reference: str | None = None
+    prix_unitaire: float | None = None
+    stock_actuel: int | None = None
+
+class FournisseurUpdate(BaseModel):
+    nom: str | None = None
+    contact: str | None = None
+
+# ...existing code...
+
+# === AJOUT DES ROUTES PUT/DELETE APRÈS LA DÉFINITION DE app, DES MODÈLES ET DE get_db ===
+
+# ===============================
+# Routes Produits : Update & Delete
+# ===============================
 @app.put("/produits/{produit_id}", response_model=ProduitInDB)
-def update_produit(produit_id: int, update_data: dict, db: Session = Depends(get_db)):
+def update_produit(produit_id: int, update: ProduitUpdate, db: Session = Depends(get_db)):
+    """Met à jour un produit existant."""
     db_produit = db.query(Produit).filter(Produit.id == produit_id).first()
     if not db_produit:
         raise HTTPException(status_code=404, detail="Produit non trouvé")
-    # Mise à jour des champs autorisés
-    for field in ["nom", "reference", "prix_unitaire", "stock_actuel"]:
-        if field in update_data:
-            setattr(db_produit, field, update_data[field])
+    update_data = update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_produit, field, value)
     db.commit()
     db.refresh(db_produit)
     return db_produit
-# --- Route de modification d'une commande ---
-from fastapi import HTTPException
 
-@app.put("/commandes/{commande_id}", response_model=CommandeInDB)
-def update_commande(commande_id: int, update_data: dict, db: Session = Depends(get_db)):
-    db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
-    if not db_commande:
-        raise HTTPException(status_code=404, detail="Commande non trouvée")
-    # Mise à jour du statut
-    if "statut" in update_data:
-        db_commande.statut = update_data["statut"]
-    # Mise à jour des articles (optionnel)
-    if "articles" in update_data:
-        # On supprime les anciens détails et on ajoute les nouveaux
-        db.query(DetailCommande).filter(DetailCommande.commande_id == commande_id).delete()
-        for article in update_data["articles"]:
-            detail = DetailCommande(
-                commande_id=commande_id,
-                produit_id=article["produit_id"],
-                quantite=article["quantite"],
-                prix_achat=article["prix_achat"]
-            )
-            db.add(detail)
+@app.delete("/produits/{produit_id}")
+def delete_produit(produit_id: int, db: Session = Depends(get_db)):
+    """Supprime un produit existant."""
+    db_produit = db.query(Produit).filter(Produit.id == produit_id).first()
+    if not db_produit:
+        raise HTTPException(status_code=404, detail="Produit non trouvé")
+    db.delete(db_produit)
     db.commit()
-    db.refresh(db_commande)
-    return db_commande
+    return {"message": "Produit supprimé"}
 
-# --- Route de suppression d'une commande ---
-@app.delete("/commandes/{commande_id}")
-def delete_commande(commande_id: int, db: Session = Depends(get_db)):
-    db_commande = db.query(Commande).filter(Commande.id == commande_id).first()
-    if not db_commande:
-        raise HTTPException(status_code=404, detail="Commande non trouvée")
-    db.query(DetailCommande).filter(DetailCommande.commande_id == commande_id).delete()
-    db.delete(db_commande)
+# ===============================
+# Routes Fournisseurs : Update & Delete
+# ===============================
+@app.put("/fournisseurs/{fournisseur_id}", response_model=FournisseurInDB)
+def update_fournisseur(fournisseur_id: int, update: FournisseurUpdate, db: Session = Depends(get_db)):
+    """Met à jour un fournisseur existant."""
+    db_fournisseur = db.query(Fournisseur).filter(Fournisseur.id == fournisseur_id).first()
+    if not db_fournisseur:
+        raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+    update_data = update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_fournisseur, field, value)
     db.commit()
-    return {"message": "Commande supprimée"}
+    db.refresh(db_fournisseur)
+    return db_fournisseur
+
+@app.delete("/fournisseurs/{fournisseur_id}")
+def delete_fournisseur(fournisseur_id: int, db: Session = Depends(get_db)):
+    """Supprime un fournisseur existant."""
+    db_fournisseur = db.query(Fournisseur).filter(Fournisseur.id == fournisseur_id).first()
+    if not db_fournisseur:
+        raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+    db.delete(db_fournisseur)
+    db.commit()
+    return {"message": "Fournisseur supprimé"}
 # api_achats.py - API de Gestion des Achats (Prêt pour le Cloud)
 import os
 from fastapi import FastAPI, Depends, HTTPException

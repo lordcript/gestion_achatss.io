@@ -1,3 +1,428 @@
+# ===============================
+# CRUD Commande : Ajout, Modification, Suppression
+# ===============================
+def show_order_crud():
+    st.header("Gestion des commandes")
+    # Chargement des commandes existantes
+    commandes = []
+    success, data = handle_api_request('GET', "/commandes/")
+    if success:
+        commandes = data
+    else:
+        st.warning("Impossible de charger les commandes.")
+
+    # Affichage de la liste
+    if commandes:
+        st.subheader("Liste des commandes")
+        for c in commandes:
+            col1, col2, col3, col4, col5 = st.columns([2,2,2,2,2])
+            with col1:
+                st.write(f"ID: {c['id']}")
+            with col2:
+                st.write(f"Société: {c.get('societe','')}")
+            with col3:
+                st.write(f"Fournisseur: {c.get('fournisseur_id','')}")
+            with col4:
+                st.write(f"Total: {c.get('cout_total',0):,.0f} FCFA")
+            with col5:
+                if st.button("Modifier", key=f"edit_c_{c['id']}"):
+                    st.session_state.commande_societe = c.get("societe","")
+                    st.session_state.commande_fournisseur_id = str(c.get("fournisseur_id",""))
+                    st.session_state.commande_details = c.get("details",[])
+                    st.session_state.commande_id_edit = c["id"]
+                if st.button("Supprimer", key=f"del_c_{c['id']}"):
+                    handle_api_request('DELETE', f"/commandes/{c['id']}")
+                    st.success("Commande supprimée.")
+                    st.cache_data.clear()
+                    st.experimental_rerun()
+
+    # Formulaire d'ajout ou de modification
+    st.subheader("Ajouter ou modifier une commande")
+    if "commande_societe" not in st.session_state:
+        st.session_state.commande_societe = ""
+    if "commande_fournisseur_id" not in st.session_state:
+        st.session_state.commande_fournisseur_id = ""
+    if "commande_details" not in st.session_state:
+        st.session_state.commande_details = []
+    if "commande_id_edit" not in st.session_state:
+        st.session_state.commande_id_edit = None
+
+    societe = st.text_input("Société", value=st.session_state.commande_societe, key="commande_societe")
+    fournisseur_id = st.text_input("ID Fournisseur", value=st.session_state.commande_fournisseur_id, key="commande_fournisseur_id")
+
+    st.subheader("Ajouter un produit à la commande")
+    produit_id = st.text_input("ID Produit")
+    quantite = st.number_input("Quantité", min_value=1, value=1)
+    prix_achat = st.number_input("Prix d'achat", min_value=0.0, value=0.0)
+    if st.button("Ajouter le produit à la commande (CRUD)"):
+        if produit_id:
+            st.session_state.commande_details.append({
+                "produit_id": int(produit_id),
+                "quantite": int(quantite),
+                "prix_achat": float(prix_achat)
+            })
+            st.success("Produit ajouté à la commande.")
+
+    if st.session_state.commande_details:
+        st.write("Produits dans la commande :")
+        st.table(st.session_state.commande_details)
+
+    if st.session_state.commande_id_edit:
+        if st.button("Enregistrer la modification commande"):
+            try:
+                fournisseur_id_int = int(fournisseur_id)
+            except ValueError:
+                st.error("ID fournisseur invalide.")
+                return
+            data = {
+                "fournisseur_id": fournisseur_id_int,
+                "societe": societe,
+                "details": st.session_state.commande_details
+            }
+            success, result = handle_api_request('PUT', f"/commandes/{st.session_state.commande_id_edit}", data=data)
+            if success:
+                st.success("Commande modifiée avec succès !")
+                st.session_state.commande_societe = ""
+                st.session_state.commande_fournisseur_id = ""
+                st.session_state.commande_details = []
+                st.session_state.commande_id_edit = None
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de la modification : {result}")
+    else:
+        if st.button("Ajouter la commande"):
+            try:
+                fournisseur_id_int = int(fournisseur_id)
+            except ValueError:
+                st.error("ID fournisseur invalide.")
+                return
+            data = {
+                "fournisseur_id": fournisseur_id_int,
+                "societe": societe,
+                "details": st.session_state.commande_details
+            }
+            success, result = handle_api_request('POST', "/commandes/", data=data)
+            if success:
+                st.success("Commande ajoutée avec succès !")
+                st.session_state.commande_societe = ""
+                st.session_state.commande_fournisseur_id = ""
+                st.session_state.commande_details = []
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de l'ajout : {result}")
+# ===============================
+# CRUD Produit : Ajout, Modification, Suppression
+# ===============================
+def show_product_crud():
+    st.header("Gestion des produits")
+    # Chargement des produits existants
+    produits = []
+    success, data = handle_api_request('GET', "/produits/")
+    if success:
+        produits = data
+    else:
+        st.warning("Impossible de charger les produits.")
+
+    # Affichage de la liste
+    if produits:
+        st.subheader("Liste des produits")
+        for p in produits:
+            col1, col2, col3, col4, col5 = st.columns([3,2,2,2,2])
+            with col1:
+                st.write(f"**{p['nom']}**")
+            with col2:
+                st.write(p["reference"])
+            with col3:
+                st.write(f"{p['prix_unitaire']} FCFA")
+            with col4:
+                st.write(f"Stock: {p['stock_actuel']}")
+            with col5:
+                if st.button("Modifier", key=f"edit_p_{p['id']}"):
+                    st.session_state.produit_nom = p["nom"]
+                    st.session_state.produit_reference = p["reference"]
+                    st.session_state.produit_prix = p["prix_unitaire"]
+                    st.session_state.produit_stock = p["stock_actuel"]
+                    st.session_state.produit_id_edit = p["id"]
+                if st.button("Supprimer", key=f"del_p_{p['id']}"):
+                    handle_api_request('DELETE', f"/produits/{p['id']}")
+                    st.success("Produit supprimé.")
+                    st.cache_data.clear()
+                    st.experimental_rerun()
+
+    # Formulaire d'ajout ou de modification
+    st.subheader("Ajouter ou modifier un produit")
+    if "produit_nom" not in st.session_state:
+        st.session_state.produit_nom = ""
+    if "produit_reference" not in st.session_state:
+        st.session_state.produit_reference = ""
+    if "produit_prix" not in st.session_state:
+        st.session_state.produit_prix = 0.0
+    if "produit_stock" not in st.session_state:
+        st.session_state.produit_stock = 0
+    if "produit_id_edit" not in st.session_state:
+        st.session_state.produit_id_edit = None
+
+    nom = st.text_input("Nom du produit", value=st.session_state.produit_nom, key="produit_nom")
+    reference = st.text_input("Référence", value=st.session_state.produit_reference, key="produit_reference")
+    prix = st.number_input("Prix unitaire", value=st.session_state.produit_prix, key="produit_prix")
+    stock = st.number_input("Stock actuel", value=st.session_state.produit_stock, key="produit_stock", step=1)
+
+    if st.session_state.produit_id_edit:
+        if st.button("Enregistrer la modification produit"):
+            data = {"nom": nom, "reference": reference, "prix_unitaire": prix, "stock_actuel": stock}
+            success, result = handle_api_request('PUT', f"/produits/{st.session_state.produit_id_edit}", data=data)
+            if success:
+                st.success("Produit modifié avec succès !")
+                st.session_state.produit_nom = ""
+                st.session_state.produit_reference = ""
+                st.session_state.produit_prix = 0.0
+                st.session_state.produit_stock = 0
+                st.session_state.produit_id_edit = None
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de la modification : {result}")
+    else:
+        if st.button("Ajouter le produit"):
+            data = {"nom": nom, "reference": reference, "prix_unitaire": prix, "stock_actuel": stock}
+            success, result = handle_api_request('POST', "/produits/", data=data)
+            if success:
+                st.success("Produit ajouté avec succès !")
+                st.session_state.produit_nom = ""
+                st.session_state.produit_reference = ""
+                st.session_state.produit_prix = 0.0
+                st.session_state.produit_stock = 0
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de l'ajout : {result}")
+# ===============================
+# CRUD Fournisseur : Ajout, Modification, Suppression
+# ===============================
+def show_supplier_crud():
+    st.header("Gestion des fournisseurs")
+    # Chargement des fournisseurs existants
+    fournisseurs = []
+    success, data = handle_api_request('GET', "/fournisseurs/")
+    if success:
+        fournisseurs = data
+    else:
+        st.warning("Impossible de charger les fournisseurs.")
+
+    # Affichage de la liste
+    if fournisseurs:
+        st.subheader("Liste des fournisseurs")
+        for f in fournisseurs:
+            col1, col2, col3, col4 = st.columns([3,3,2,2])
+            with col1:
+                st.write(f"**{f['nom']}**")
+            with col2:
+                st.write(f["contact"])
+            with col3:
+                if st.button("Modifier", key=f"edit_f_{f['id']}"):
+                    st.session_state.fournisseur_nom = f["nom"]
+                    st.session_state.fournisseur_contact = f["contact"]
+                    st.session_state.fournisseur_id_edit = f["id"]
+            with col4:
+                if st.button("Supprimer", key=f"del_f_{f['id']}"):
+                    handle_api_request('DELETE', f"/fournisseurs/{f['id']}")
+                    st.success("Fournisseur supprimé.")
+                    st.cache_data.clear()
+                    st.experimental_rerun()
+
+    # Formulaire d'ajout ou de modification
+    st.subheader("Ajouter ou modifier un fournisseur")
+    if "fournisseur_nom" not in st.session_state:
+        st.session_state.fournisseur_nom = ""
+    if "fournisseur_contact" not in st.session_state:
+        st.session_state.fournisseur_contact = ""
+    if "fournisseur_id_edit" not in st.session_state:
+        st.session_state.fournisseur_id_edit = None
+
+    nom = st.text_input("Nom du fournisseur", value=st.session_state.fournisseur_nom, key="fournisseur_nom")
+    contact = st.text_input("Contact", value=st.session_state.fournisseur_contact, key="fournisseur_contact")
+
+    if st.session_state.fournisseur_id_edit:
+        if st.button("Enregistrer la modification"):
+            data = {"nom": nom, "contact": contact}
+            success, result = handle_api_request('PUT', f"/fournisseurs/{st.session_state.fournisseur_id_edit}", data=data)
+            if success:
+                st.success("Fournisseur modifié avec succès !")
+                st.session_state.fournisseur_nom = ""
+                st.session_state.fournisseur_contact = ""
+                st.session_state.fournisseur_id_edit = None
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de la modification : {result}")
+    else:
+        if st.button("Ajouter le fournisseur"):
+            data = {"nom": nom, "contact": contact}
+            success, result = handle_api_request('POST', "/fournisseurs/", data=data)
+            if success:
+                st.success("Fournisseur ajouté avec succès !")
+                st.session_state.fournisseur_nom = ""
+                st.session_state.fournisseur_contact = ""
+                st.cache_data.clear()
+                st.experimental_rerun()
+            else:
+                st.error(f"Erreur lors de l'ajout : {result}")
+# ===============================
+# Exemple : Formulaire Commande avec sauvegarde temporaire et persistante
+# ===============================
+def show_order_form():
+    st.header("Créer une nouvelle commande")
+    if "commande_societe" not in st.session_state:
+        st.session_state.commande_societe = ""
+    if "commande_fournisseur_id" not in st.session_state:
+        st.session_state.commande_fournisseur_id = ""
+    if "commande_details" not in st.session_state:
+        st.session_state.commande_details = []  # Liste de dicts {produit_id, quantite, prix_achat}
+
+    societe = st.text_input("Société", value=st.session_state.commande_societe, key="commande_societe")
+    fournisseur_id = st.text_input("ID Fournisseur", value=st.session_state.commande_fournisseur_id, key="commande_fournisseur_id")
+
+    # Saisie d'un produit à ajouter à la commande
+    st.subheader("Ajouter un produit à la commande")
+    produit_id = st.text_input("ID Produit")
+    quantite = st.number_input("Quantité", min_value=1, value=1)
+    prix_achat = st.number_input("Prix d'achat", min_value=0.0, value=0.0)
+    if st.button("Ajouter le produit à la commande"):
+        if produit_id:
+            st.session_state.commande_details.append({
+                "produit_id": int(produit_id),
+                "quantite": int(quantite),
+                "prix_achat": float(prix_achat)
+            })
+            st.success("Produit ajouté à la commande.")
+
+    # Affichage des produits ajoutés
+    if st.session_state.commande_details:
+        st.write("Produits dans la commande :")
+        st.table(st.session_state.commande_details)
+
+    st.session_state.commande_societe = societe
+    st.session_state.commande_fournisseur_id = fournisseur_id
+
+    if st.button("Enregistrer la commande"):
+        try:
+            fournisseur_id_int = int(fournisseur_id)
+        except ValueError:
+            st.error("ID fournisseur invalide.")
+            return
+        data = {
+            "fournisseur_id": fournisseur_id_int,
+            "societe": societe,
+            "details": st.session_state.commande_details
+        }
+        success, result = handle_api_request('POST', "/commandes/", data=data)
+        if success:
+            st.success("Commande enregistrée avec succès !")
+            st.session_state.commande_societe = ""
+            st.session_state.commande_fournisseur_id = ""
+            st.session_state.commande_details = []
+        else:
+            st.error(f"Erreur lors de l'enregistrement : {result}")
+# ===============================
+# Exemple : Formulaire Produit avec sauvegarde temporaire et persistante
+# ===============================
+def show_product_form():
+    st.header("Ajouter un nouveau produit")
+    if "produit_nom" not in st.session_state:
+        st.session_state.produit_nom = ""
+    if "produit_reference" not in st.session_state:
+        st.session_state.produit_reference = ""
+    if "produit_prix" not in st.session_state:
+        st.session_state.produit_prix = 0.0
+    if "produit_stock" not in st.session_state:
+        st.session_state.produit_stock = 0
+
+    nom = st.text_input("Nom du produit", value=st.session_state.produit_nom, key="produit_nom")
+    reference = st.text_input("Référence", value=st.session_state.produit_reference, key="produit_reference")
+    prix = st.number_input("Prix unitaire", value=st.session_state.produit_prix, key="produit_prix")
+    stock = st.number_input("Stock initial", value=st.session_state.produit_stock, key="produit_stock", step=1)
+
+    st.session_state.produit_nom = nom
+    st.session_state.produit_reference = reference
+    st.session_state.produit_prix = prix
+    st.session_state.produit_stock = stock
+
+    if st.button("Enregistrer le produit"):
+        data = {"nom": nom, "reference": reference, "prix_unitaire": prix, "stock_actuel": stock}
+        success, result = handle_api_request('POST', "/produits/", data=data)
+        if success:
+            st.success("Produit enregistré avec succès !")
+            st.session_state.produit_nom = ""
+            st.session_state.produit_reference = ""
+            st.session_state.produit_prix = 0.0
+            st.session_state.produit_stock = 0
+        else:
+            st.error(f"Erreur lors de l'enregistrement : {result}")
+
+# ===============================
+# Exemple : Formulaire Fournisseur avec sauvegarde temporaire et persistante
+# ===============================
+def show_supplier_form():
+    st.header("Ajouter un nouveau fournisseur")
+    if "fournisseur_nom" not in st.session_state:
+        st.session_state.fournisseur_nom = ""
+    if "fournisseur_contact" not in st.session_state:
+        st.session_state.fournisseur_contact = ""
+
+    nom = st.text_input("Nom du fournisseur", value=st.session_state.fournisseur_nom, key="fournisseur_nom")
+    contact = st.text_input("Contact", value=st.session_state.fournisseur_contact, key="fournisseur_contact")
+
+    st.session_state.fournisseur_nom = nom
+    st.session_state.fournisseur_contact = contact
+
+    if st.button("Enregistrer le fournisseur"):
+        data = {"nom": nom, "contact": contact}
+        success, result = handle_api_request('POST', "/fournisseurs/", data=data)
+        if success:
+            st.success("Fournisseur enregistré avec succès !")
+            st.session_state.fournisseur_nom = ""
+            st.session_state.fournisseur_contact = ""
+        else:
+            st.error(f"Erreur lors de l'enregistrement : {result}")
+# ===============================
+# Exemple : Formulaire Client avec sauvegarde temporaire et persistante
+# ===============================
+import streamlit as st
+
+def show_client_form():
+    st.header("Ajouter un nouveau client")
+    # Initialisation des champs dans session_state si besoin
+    if "client_nom" not in st.session_state:
+        st.session_state.client_nom = ""
+    if "client_contact" not in st.session_state:
+        st.session_state.client_contact = ""
+    if "client_email" not in st.session_state:
+        st.session_state.client_email = ""
+
+    # Formulaire avec valeurs persistantes
+    nom = st.text_input("Nom du client", value=st.session_state.client_nom, key="client_nom")
+    contact = st.text_input("Contact", value=st.session_state.client_contact, key="client_contact")
+    email = st.text_input("Email", value=st.session_state.client_email, key="client_email")
+
+    # Sauvegarde temporaire automatique (dans session_state)
+    st.session_state.client_nom = nom
+    st.session_state.client_contact = contact
+    st.session_state.client_email = email
+
+    if st.button("Enregistrer le client"):
+        # Appel à l'API pour sauvegarde persistante
+        data = {"nom": nom, "contact": contact, "email": email}
+        success, result = handle_api_request('POST', "/clients/", data=data)
+        if success:
+            st.success("Client enregistré avec succès !")
+            # On vide les champs après enregistrement
+            st.session_state.client_nom = ""
+            st.session_state.client_contact = ""
+            st.session_state.client_email = ""
+        else:
+            st.error(f"Erreur lors de l'enregistrement : {result}")
 import streamlit as st
 import hashlib
 import pandas as pd
@@ -839,6 +1264,8 @@ def add_to_cart(product_id, quantity, price):
         st.session_state.cart[product_id]['name'] = product_name
     else:
         st.session_state.cart[product_id] = {'quantity': quantity, 'price': price, 'name': product_name}
+    # Après modification du panier, on peut forcer le rafraîchissement des données produits si besoin
+    st.cache_data.clear()  # Vide le cache pour garantir la synchronisation
 
 def finalize_purchase(fournisseur_id, societe): 
     """Finalise le panier actuel en une commande via l'API.""" 
